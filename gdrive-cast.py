@@ -1,7 +1,11 @@
 import argparse
+import os
 import shlex
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
+from datetime import datetime
+from email.utils import format_datetime
 
 from googleapiclient import discovery
 from pydrive2.auth import GoogleAuth
@@ -58,13 +62,20 @@ def get_or_create_folder(drive, name, parent_folder_id) -> GoogleDriveFile:
     return folder
 
 
-def upload_file(file_path, folder_id):
+def upload_file(file_path, folder_id) -> str:
+
+    # TODO: override existing file
+
+    size = os.path.getsize(file_path)
+    print(f"Uploading file: {file_path}, size={size}")
+
     file_to_upload = drive.CreateFile({'parents': [{'id': folder_id}]})
     file_to_upload.SetContentFile(file_path)
     file_to_upload.Upload()
 
-    print(f"Uploaded file: `{file_to_upload}`")
-    print(f"Uploaded file (direct link): https://drive.usercontent.google.com/download?export=download&confirm=t&id=`{file_to_upload['id']}`")
+    # print(f"Uploaded file: `{file_to_upload}`")
+    direct_link = f"https://drive.usercontent.google.com/download?export=download&confirm=t&id={file_to_upload['id']}"
+    print(f"Uploaded file (direct link): {direct_link}")
 
     # add "Anyone with link" permission
     file_to_upload.InsertPermission({
@@ -72,6 +83,9 @@ def upload_file(file_path, folder_id):
         'value': 'anyone',
         'role': 'reader'}
     )
+    print('Added permission: "Anyone with link"')
+
+    return direct_link
 
 
 class YouTubeVideo:
@@ -118,6 +132,39 @@ def process_file(command_template: str, video_id: str) -> str:
     return output_file
 
 
+def create_feed_file(feed_file, youtube_channel: YouTubeChannel, video: YouTubeVideo, audio_link):
+    rss = ET.Element("rss")
+    rss.set('version', '2.0')
+    rss.set('xmlns:itunes', 'http://www.itunes.com/dtds/podcast-1.0.dtd')
+    rss.set('xmlns:atom', 'http://www.w3.org/2005/Atom')
+
+    channel = ET.SubElement(rss, "channel")
+    ET.SubElement(channel, "title").text = youtube_channel.title
+    ET.SubElement(channel, "link").text = youtube_channel.url
+    ET.SubElement(channel, "language").text = 'en-us'
+    ET.SubElement(channel, "itunes:author").text = 'author'
+    ET.SubElement(channel, "itunes:summary").text = youtube_channel.description
+    ET.SubElement(channel, "description").text = youtube_channel.description
+    ET.SubElement(channel, "itunes:explicit").text = 'no'
+    ET.SubElement(channel, "itunes:category", text='Politics')
+    ET.SubElement(channel, "itunes:image", href=youtube_channel.banner_url)
+
+    audio_file_size = os.path.getsize(audio_file)
+
+    item = ET.SubElement(channel, "item")
+    ET.SubElement(item, "title").text = video.title
+    ET.SubElement(item, "description").text = video.description
+    ET.SubElement(item, "itunes:explicit").text = 'no'
+    ET.SubElement(item, "enclosure", url=audio_link, length=f'{audio_file_size}', type="audio/mpeg")
+    ET.SubElement(item, "guid").text = audio_link
+    video_date = datetime.fromisoformat(video.published)
+    ET.SubElement(item, "pubDate").text = format_datetime(video_date)
+
+    tree = ET.ElementTree(rss)
+    ET.indent(tree, space="\t", level=0)
+    tree.write(feed_file, encoding="utf-8")
+
+
 parser = argparse.ArgumentParser(prog='GDrive Cast', description='Host a podcast on Google Drive')
 parser.add_argument('video_id')
 parser.add_argument('-p', '--process', type=str, help='Post-processing command. Use {video_id} and {output_file} as placeholders.')
@@ -140,8 +187,8 @@ print(f"Published at: {video.published}")
 print(f"Thumbnail: {video.thumbnail_url}")
 print(f"Channel Name: {video.channel_title}")
 print(f"Channel ID: {video.channel_id}")
-print("\n--- Description ---")
-print(video.description)
+# print("\n--- Description ---")
+# print(video.description)
 
 channel_folder = get_or_create_folder(drive, video.channel_id, root['id'])
 print('channel_folder: %s' % root)
@@ -153,5 +200,11 @@ print(f"Description: {channel.description}")
 print(f"Banner: {channel.banner_url}")
 print(f"URL: {channel.url}")
 
-output_file = process_file(args.process, video_id)
-print(f"Saved file to {output_file}")
+audio_file = process_file(args.process, video_id)
+print(f"Saved file to {audio_file}")
+
+feed_file = 'feed.xml'
+audio_link = upload_file(audio_file, channel_folder['id'])
+create_feed_file(feed_file, channel, video, audio_link)
+feed_link = upload_file(feed_file, channel_folder['id'])
+print(f"Feed link: {feed_link}")
