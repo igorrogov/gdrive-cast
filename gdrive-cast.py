@@ -6,6 +6,7 @@ import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from email.utils import format_datetime
+from pathlib import Path
 
 from googleapiclient import discovery
 from pydrive2.auth import GoogleAuth
@@ -146,22 +147,33 @@ def process_file(command_template: str, video_id: str) -> str:
     return output_file
 
 
-def create_feed_file(feed_file, youtube_channel: YouTubeChannel, video: YouTubeVideo, audio_link):
-    rss = ET.Element("rss")
-    rss.set('version', '2.0')
-    rss.set('xmlns:itunes', 'http://www.itunes.com/dtds/podcast-1.0.dtd')
-    rss.set('xmlns:atom', 'http://www.w3.org/2005/Atom')
+def create_or_append_feed_file(feed_file, youtube_channel: YouTubeChannel, video: YouTubeVideo, audio_link):
 
-    channel = ET.SubElement(rss, "channel")
-    ET.SubElement(channel, "title").text = youtube_channel.title
-    ET.SubElement(channel, "link").text = youtube_channel.url
-    ET.SubElement(channel, "language").text = 'en-us'
-    ET.SubElement(channel, "itunes:author").text = 'author'
-    ET.SubElement(channel, "itunes:summary").text = youtube_channel.description
-    ET.SubElement(channel, "description").text = youtube_channel.description
-    ET.SubElement(channel, "itunes:explicit").text = 'no'
-    ET.SubElement(channel, "itunes:category", text='Politics')
-    ET.SubElement(channel, "itunes:image", href=youtube_channel.banner_url)
+    # TODO: download the existing feed.xml from Google Drive if exists
+
+    if Path(feed_file).exists():
+        print("Parsing existing feed...")
+        tree = ET.parse(feed_file)
+        channel = tree.getroot().find('channel')
+    else:
+        print("Creating new feed file...")
+        rss = ET.Element("rss")
+        rss.set('version', '2.0')
+        rss.set('xmlns:itunes', 'http://www.itunes.com/dtds/podcast-1.0.dtd')
+        rss.set('xmlns:atom', 'http://www.w3.org/2005/Atom')
+
+        tree = ET.ElementTree(rss)
+
+        channel = ET.SubElement(rss, "channel")
+        ET.SubElement(channel, "title").text = youtube_channel.title
+        ET.SubElement(channel, "link").text = youtube_channel.url
+        ET.SubElement(channel, "language").text = 'en-us'
+        ET.SubElement(channel, "itunes:author").text = 'author'
+        ET.SubElement(channel, "itunes:summary").text = youtube_channel.description
+        ET.SubElement(channel, "description").text = youtube_channel.description
+        ET.SubElement(channel, "itunes:explicit").text = 'no'
+        ET.SubElement(channel, "itunes:category", text='Politics')
+        ET.SubElement(channel, "itunes:image", href=youtube_channel.banner_url)
 
     audio_file_size = os.path.getsize(audio_file)
 
@@ -174,9 +186,8 @@ def create_feed_file(feed_file, youtube_channel: YouTubeChannel, video: YouTubeV
     video_date = datetime.fromisoformat(video.published)
     ET.SubElement(item, "pubDate").text = format_datetime(video_date)
 
-    tree = ET.ElementTree(rss)
     ET.indent(tree, space="\t", level=0)
-    tree.write(feed_file, encoding="utf-8")
+    tree.write(feed_file, encoding="utf-8", xml_declaration=True)
 
 
 parser = argparse.ArgumentParser(prog='GDrive Cast', description='Host a podcast on Google Drive')
@@ -219,6 +230,6 @@ print(f"Saved file to {audio_file}")
 
 feed_file = 'feed.xml'
 audio_link = upload_file(audio_file, channel_folder['id'])
-create_feed_file(feed_file, channel, video, audio_link)
+create_or_append_feed_file(feed_file, channel, video, audio_link)
 feed_link = upload_file(feed_file, channel_folder['id'])
 print(f"Feed link: {feed_link}")
