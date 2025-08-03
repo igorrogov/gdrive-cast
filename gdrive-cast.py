@@ -19,24 +19,28 @@ FOLDER_TYPE = "application/vnd.google-apps.folder"
 def auth() -> GoogleAuth:
     gauth = GoogleAuth()
 
-    gauth.LoadCredentialsFile("mycreds.txt")
+    gauth.LoadCredentialsFile()
 
-    gauth.auth_params = {
-        'access_type': 'offline',
-        'prompt': 'consent'
-    }
+    # gauth.auth_params = {
+    #     'access_type': 'offline',
+    #     'prompt': 'consent'
+    # }
     gauth.settings['oauth_scope'] = [
         'https://www.googleapis.com/auth/drive',
         'https://www.googleapis.com/auth/youtube.readonly'
     ]
 
     if gauth.credentials is None:
+        print("Web server auth...")
         gauth.LocalWebserverAuth()
     elif gauth.access_token_expired:
+        print("Credentials expired. Refreshing...")
         gauth.Refresh()
     else:
+        print("Authorizing...")
         gauth.Authorize()
-    gauth.SaveCredentialsFile("mycreds.txt")
+
+    gauth.SaveCredentialsFile()
 
     return gauth
 
@@ -62,28 +66,38 @@ def get_or_create_folder(drive, name, parent_folder_id) -> GoogleDriveFile:
     return folder
 
 
-def upload_file(file_path, folder_id) -> str:
+def upload_file(file_name, folder_id) -> str:
 
-    # TODO: override existing file
+    # check whether the file already exists
+    query = f"title = '{file_name}' and '{folder_id}' in parents and trashed = false"
+    file_list = drive.ListFile({'q': query}).GetList()
+    if file_list:
+        print(f"Overriding existing file: {file_name}")
+        remote_file = file_list[0]
+        created = False
+    else:
+        print(f"Creating a new file: {file_name}")
+        remote_file = drive.CreateFile({'parents': [{'id': folder_id}]})
+        created = True
 
-    size = os.path.getsize(file_path)
-    print(f"Uploading file: {file_path}, size={size}")
+    size = os.path.getsize(file_name)
+    print(f"Uploading file: {file_name}, size={size}")
 
-    file_to_upload = drive.CreateFile({'parents': [{'id': folder_id}]})
-    file_to_upload.SetContentFile(file_path)
-    file_to_upload.Upload()
+    remote_file.SetContentFile(file_name)
+    remote_file.Upload()
 
     # print(f"Uploaded file: `{file_to_upload}`")
-    direct_link = f"https://drive.usercontent.google.com/download?export=download&confirm=t&id={file_to_upload['id']}"
+    direct_link = f"https://drive.usercontent.google.com/download?export=download&confirm=t&id={remote_file['id']}"
     print(f"Uploaded file (direct link): {direct_link}")
 
     # add "Anyone with link" permission
-    file_to_upload.InsertPermission({
-        'type': 'anyone',
-        'value': 'anyone',
-        'role': 'reader'}
-    )
-    print('Added permission: "Anyone with link"')
+    if created:
+        remote_file.InsertPermission({
+            'type': 'anyone',
+            'value': 'anyone',
+            'role': 'reader'}
+        )
+        print('Added permission: "Anyone with link"')
 
     return direct_link
 
