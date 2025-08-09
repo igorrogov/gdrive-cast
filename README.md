@@ -8,7 +8,7 @@ This is a small utility that can help you to automate the process of converting 
 * You need to have a google account with Google Drive.
 * Your Google Drive should have enough space for your podcast audio files.
 * You should separately download and put a YouTube converter tool (such as https://github.com/yt-dlp/yt-dlp) to the root folder. Alternatively, you can configure the path to the tool in the `config.ini` file.
-* You create and download your Google OAuth2 credentials (see https://developers.google.com/identity/protocols/oauth2). Very good documentation on how to do that is here: https://docs.iterative.ai/PyDrive2/quickstart/#authentication.
+* You need to create and download your Google OAuth2 credentials (see https://developers.google.com/identity/protocols/oauth2). Very good documentation on how to do that is here: https://docs.iterative.ai/PyDrive2/quickstart/#authentication.
 
 ## How to build and run
 
