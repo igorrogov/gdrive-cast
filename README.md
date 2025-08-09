@@ -42,3 +42,7 @@ python .\gdrive-cast.py <ID>
 where <ID> is the YouTube video ID (e.g. https://www.youtube.com/watch?v=ID)
 
 It will open a browser window to authentificate against Google for the first time. On next run it will use the saved credentials.
+
+The program will show a RSS feed link that you can copy-paste in your podcast player.
+
+The podcast feed (feed.xml) and the audio files will be uploaded to your google drive in the root folder called `gdrive-cast`.
