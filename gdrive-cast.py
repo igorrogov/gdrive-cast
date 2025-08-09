@@ -1,4 +1,5 @@
 import argparse
+import configparser
 import os
 import shlex
 import subprocess
@@ -6,8 +7,8 @@ import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from email.utils import format_datetime
-from pathlib import Path
 
+import humanize
 from googleapiclient import discovery
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
@@ -82,7 +83,7 @@ def upload_file(file_name, folder_id) -> str:
         created = True
 
     size = os.path.getsize(file_name)
-    print(f"Uploading file: {file_name}, size={size}")
+    print(f"Uploading file: {file_name}, size={humanize.naturalsize(size, binary=True)}")
 
     remote_file.SetContentFile(file_name)
     remote_file.Upload()
@@ -147,11 +148,24 @@ def process_file(command_template: str, video_id: str) -> str:
     return output_file
 
 
-def create_or_append_feed_file(feed_file, youtube_channel: YouTubeChannel, video: YouTubeVideo, audio_link):
+def create_or_append_feed_file(feed_file, parent_folder_id, youtube_channel: YouTubeChannel, video: YouTubeVideo, audio_link):
 
-    # TODO: download the existing feed.xml from Google Drive if exists
+    # remove local feed if exists
+    if os.path.exists(feed_file):
+        os.remove(feed_file)
 
-    if Path(feed_file).exists():
+    # download the existing feed.xml from Google Drive if exists
+
+    remote_feed_files = drive.ListFile({
+        'q': f"title='{feed_file}' and '{parent_folder_id}' in parents and trashed=false"
+    }).GetList()
+
+    if remote_feed_files:
+        remote_feed_file = remote_feed_files[0]
+        size_str = humanize.naturalsize(remote_feed_file.get('fileSize', 0), binary = True)
+        print(f"Downloading remote feed file: {feed_file} ({size_str})...")
+        remote_feed_file.GetContentFile(feed_file)
+
         print("Parsing existing feed...")
         tree = ET.parse(feed_file)
         channel = tree.getroot().find('channel')
@@ -192,8 +206,10 @@ def create_or_append_feed_file(feed_file, youtube_channel: YouTubeChannel, video
 
 parser = argparse.ArgumentParser(prog='GDrive Cast', description='Host a podcast on Google Drive')
 parser.add_argument('video_id')
-parser.add_argument('-p', '--process', type=str, help='Post-processing command. Use {video_id} and {output_file} as placeholders.')
 args = parser.parse_args()
+
+config = configparser.ConfigParser()
+config.read('config.ini')
 
 # authenticate and init services
 gauth = auth()
@@ -225,11 +241,12 @@ print(f"Description: {channel.description}")
 print(f"Banner: {channel.banner_url}")
 print(f"URL: {channel.url}")
 
-audio_file = process_file(args.process, video_id)
+process_command_template = config['app']['youtube_process_command']
+audio_file = process_file(process_command_template, video_id)
 print(f"Saved file to {audio_file}")
 
 feed_file = 'feed.xml'
 audio_link = upload_file(audio_file, channel_folder['id'])
-create_or_append_feed_file(feed_file, channel, video, audio_link)
+create_or_append_feed_file(feed_file, channel_folder['id'], channel, video, audio_link)
 feed_link = upload_file(feed_file, channel_folder['id'])
 print(f"Feed link: {feed_link}")
