@@ -204,6 +204,8 @@ def create_or_append_feed_file(feed_file, parent_folder_id, youtube_channel: You
     tree.write(feed_file, encoding="utf-8", xml_declaration=True)
 
 
+ET.register_namespace('itunes', 'http://www.itunes.com/dtds/podcast-1.0.dtd')
+
 parser = argparse.ArgumentParser(prog='GDrive Cast', description='Host a podcast on Google Drive')
 parser.add_argument('video_id')
 args = parser.parse_args()
