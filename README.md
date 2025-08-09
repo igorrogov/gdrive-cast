@@ -31,7 +31,7 @@ Create an Google OAuth2 credentials and save it to `credentials.json` in the roo
  * Google Drive API
  * YouTube Data API v3 (used only for loading information about videos and channels, not for downloading).
 
-Make sure you have a YouTube converter installed. The simplest option is to simply copy the `yt-dlp` to the root folder.
+Make sure you have a YouTube converter installed. The simplest option is to copy the `yt-dlp` to the root folder.
 
 Find a video tha you want to convert and use this command:
 
