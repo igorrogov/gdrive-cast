@@ -17,7 +17,8 @@ from pydrive2.files import GoogleDriveFile
 ROOT_FOLDER = "gdrive-cast"
 FOLDER_TYPE = "application/vnd.google-apps.folder"
 MEDIA_CACHE_FOLDER = "media-cache"
-
+FEED_CACHE_FOLDER = "feed-cache"
+FEED_FILE_NAME = "feed.xml"
 
 def auth() -> GoogleAuth:
     gauth = GoogleAuth()
@@ -204,13 +205,35 @@ def create_or_append_feed_file(feed_file, parent_folder_id, youtube_channel: You
     ET.indent(tree, space="\t", level=0)
     tree.write(feed_file, encoding="utf-8", xml_declaration=True)
 
+def list_podcasts(root: GoogleDriveFile):
+    podcast_folders = drive.ListFile({
+        'q': f"'{root['id']}' in parents and trashed=false and mimeType='{FOLDER_TYPE}'"
+    }).GetList()
+
+    if not os.path.exists(FEED_CACHE_FOLDER):
+        os.makedirs(FEED_CACHE_FOLDER)
+
+    for f in podcast_folders:
+        remote_feed_files = drive.ListFile({
+            'q': f"title='{FEED_FILE_NAME}' and '{f['id']}' in parents and trashed=false"
+        }).GetList()
+
+        if remote_feed_files:
+            remote_feed_file = remote_feed_files[0]
+            local_feed_file = f"{FEED_CACHE_FOLDER}/{f['id']}.xml"
+            remote_feed_file.GetContentFile(local_feed_file)
+            tree = ET.parse(local_feed_file)
+            channel = tree.getroot().find('channel')
+            print(f" - Channel: {f['title']} - {channel.find('title').text}")
+
 
 ## Program start
 
 ET.register_namespace('itunes', 'http://www.itunes.com/dtds/podcast-1.0.dtd')
 
 parser = argparse.ArgumentParser(prog='GDrive Cast', description='Host a podcast on Google Drive')
-parser.add_argument('video_id')
+parser.add_argument('video_id', nargs='?', default="")
+parser.add_argument("-l", "--list", help="List existing podcast channels and exit.", action="store_true")
 args = parser.parse_args()
 
 config = configparser.ConfigParser()
@@ -223,6 +246,14 @@ youtube = discovery.build('youtube', 'v3', credentials=gauth.credentials)
 
 root = get_or_create_folder(drive, ROOT_FOLDER, 'root')
 print(f"Using root folder: {root['title']} ({root['id']})")
+
+if args.list:
+    list_podcasts(root)
+    sys.exit(0)
+
+if not args.video_id:
+    print("Video ID is required")
+    sys.exit(-1)
 
 video_id = args.video_id
 video = YouTubeVideo(youtube=youtube, video_id=video_id)
@@ -251,7 +282,7 @@ audio_file_name = f"{video_id}.mp3"
 audio_file_path = process_file(process_command_template, video_id)
 print(f"Saved file to {audio_file_path}")
 
-feed_file = 'feed.xml'
+feed_file = FEED_FILE_NAME
 audio_link = upload_file(audio_file_path, audio_file_name, channel_folder['id'])
 create_or_append_feed_file(feed_file, channel_folder['id'], channel, video, audio_link, audio_file_path)
 feed_link = upload_file(feed_file, feed_file, channel_folder['id'])

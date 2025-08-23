@@ -209,3 +209,5 @@ __marimo__/
 /.idea/
 /client_secrets.json
 /mycreds.txt
+/feed-cache
+/media-cache
