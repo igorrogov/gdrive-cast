@@ -16,6 +16,7 @@ from pydrive2.files import GoogleDriveFile
 
 ROOT_FOLDER = "gdrive-cast"
 FOLDER_TYPE = "application/vnd.google-apps.folder"
+MEDIA_CACHE_FOLDER = "media-cache"
 
 
 def auth() -> GoogleAuth:
@@ -68,7 +69,7 @@ def get_or_create_folder(drive, name, parent_folder_id) -> GoogleDriveFile:
     return folder
 
 
-def upload_file(file_name, folder_id) -> str:
+def upload_file(file_path, file_name, folder_id) -> str:
 
     # check whether the file already exists
     query = f"title = '{file_name}' and '{folder_id}' in parents and trashed = false"
@@ -82,10 +83,10 @@ def upload_file(file_name, folder_id) -> str:
         remote_file = drive.CreateFile({'parents': [{'id': folder_id}]})
         created = True
 
-    size = os.path.getsize(file_name)
+    size = os.path.getsize(file_path)
     print(f"Uploading file: {file_name}, size={humanize.naturalsize(size, binary=True)}")
 
-    remote_file.SetContentFile(file_name)
+    remote_file.SetContentFile(file_path)
     remote_file.Upload()
 
     # print(f"Uploaded file: `{file_to_upload}`")
@@ -139,7 +140,7 @@ def process_file(command_template: str, video_id: str) -> str:
         print("No external command configured. Skipping.")
         sys.exit(-1)
 
-    output_file = f"{video_id}.mp3"
+    output_file = f"{MEDIA_CACHE_FOLDER}/{video_id}.mp3"
 
     command_to_run = command_template.format(video_id=video_id, output_file=output_file)
     print(f"Executing: {command_to_run}")
@@ -148,7 +149,7 @@ def process_file(command_template: str, video_id: str) -> str:
     return output_file
 
 
-def create_or_append_feed_file(feed_file, parent_folder_id, youtube_channel: YouTubeChannel, video: YouTubeVideo, audio_link):
+def create_or_append_feed_file(feed_file, parent_folder_id, youtube_channel: YouTubeChannel, video: YouTubeVideo, audio_link, audio_file_path):
 
     # remove local feed if exists
     if os.path.exists(feed_file):
@@ -189,7 +190,7 @@ def create_or_append_feed_file(feed_file, parent_folder_id, youtube_channel: You
         ET.SubElement(channel, "itunes:category", text='Politics')
         ET.SubElement(channel, "itunes:image", href=youtube_channel.banner_url)
 
-    audio_file_size = os.path.getsize(audio_file)
+    audio_file_size = os.path.getsize(audio_file_path)
 
     item = ET.SubElement(channel, "item")
     ET.SubElement(item, "title").text = video.title
@@ -203,6 +204,8 @@ def create_or_append_feed_file(feed_file, parent_folder_id, youtube_channel: You
     ET.indent(tree, space="\t", level=0)
     tree.write(feed_file, encoding="utf-8", xml_declaration=True)
 
+
+## Program start
 
 ET.register_namespace('itunes', 'http://www.itunes.com/dtds/podcast-1.0.dtd')
 
@@ -219,7 +222,7 @@ drive = GoogleDrive(gauth)
 youtube = discovery.build('youtube', 'v3', credentials=gauth.credentials)
 
 root = get_or_create_folder(drive, ROOT_FOLDER, 'root')
-print('root: %s' % root)
+print(f"Using root folder: {root['title']} ({root['id']})")
 
 video_id = args.video_id
 video = YouTubeVideo(youtube=youtube, video_id=video_id)
@@ -234,7 +237,7 @@ print(f"Channel ID: {video.channel_id}")
 # print(video.description)
 
 channel_folder = get_or_create_folder(drive, video.channel_id, root['id'])
-print('channel_folder: %s' % root)
+print(f"Using channel folder: {channel_folder['title']} ({channel_folder['id']})")
 
 channel = YouTubeChannel(youtube, channel_id=video.channel_id)
 print("--- Channel ---")
@@ -244,11 +247,12 @@ print(f"Banner: {channel.banner_url}")
 print(f"URL: {channel.url}")
 
 process_command_template = config['app']['youtube_process_command']
-audio_file = process_file(process_command_template, video_id)
-print(f"Saved file to {audio_file}")
+audio_file_name = f"{video_id}.mp3"
+audio_file_path = process_file(process_command_template, video_id)
+print(f"Saved file to {audio_file_path}")
 
 feed_file = 'feed.xml'
-audio_link = upload_file(audio_file, channel_folder['id'])
-create_or_append_feed_file(feed_file, channel_folder['id'], channel, video, audio_link)
-feed_link = upload_file(feed_file, channel_folder['id'])
+audio_link = upload_file(audio_file_path, audio_file_name, channel_folder['id'])
+create_or_append_feed_file(feed_file, channel_folder['id'], channel, video, audio_link, audio_file_path)
+feed_link = upload_file(feed_file, feed_file, channel_folder['id'])
 print(f"Feed link: {feed_link}")
