@@ -184,7 +184,7 @@ def create_or_append_feed_file(feed_file, parent_folder_id, youtube_channel: You
         ET.SubElement(channel, "title").text = youtube_channel.title
         ET.SubElement(channel, "link").text = youtube_channel.url
         ET.SubElement(channel, "language").text = 'en-us'
-        ET.SubElement(channel, "itunes:author").text = 'author'
+        ET.SubElement(channel, "itunes:author").text = 'GDrive Cast'
         ET.SubElement(channel, "itunes:summary").text = youtube_channel.description
         ET.SubElement(channel, "description").text = youtube_channel.description
         ET.SubElement(channel, "itunes:explicit").text = 'no'
@@ -213,6 +213,9 @@ def list_podcasts(root: GoogleDriveFile):
     if not os.path.exists(FEED_CACHE_FOLDER):
         os.makedirs(FEED_CACHE_FOLDER)
 
+    podcast_folders.sort(key=lambda x: x['id'])
+
+    index = 1
     for f in podcast_folders:
         remote_feed_files = drive.ListFile({
             'q': f"title='{FEED_FILE_NAME}' and '{f['id']}' in parents and trashed=false"
@@ -224,7 +227,23 @@ def list_podcasts(root: GoogleDriveFile):
             remote_feed_file.GetContentFile(local_feed_file)
             tree = ET.parse(local_feed_file)
             channel = tree.getroot().find('channel')
-            print(f" - Channel: {f['title']} - {channel.find('title').text}")
+            print(f"\n{index}. Channel: {f['title']} - {channel.find('title').text}")
+            index += 1
+
+            # show episodes
+            episodes = channel.findall('item')
+            for episode in episodes:
+                print(f" - {episode.find('title').text}")
+
+def delete_podcast(root: GoogleDriveFile, channel_id: str):
+    ch_list = drive.ListFile({
+        'q': f"title='{channel_id}' and '{root['id']}' in parents and trashed=false and mimeType='{FOLDER_TYPE}'"
+    }).GetList()
+
+    if ch_list:
+        ch = ch_list[0]
+        ch.Delete()
+        print(f"Deleted podcast / channel folder: {channel_id}")
 
 
 ## Program start
@@ -234,6 +253,7 @@ ET.register_namespace('itunes', 'http://www.itunes.com/dtds/podcast-1.0.dtd')
 parser = argparse.ArgumentParser(prog='GDrive Cast', description='Host a podcast on Google Drive')
 parser.add_argument('video_id', nargs='?', default="")
 parser.add_argument("-l", "--list", help="List existing podcast channels and exit.", action="store_true")
+parser.add_argument("-d", "--delete", help="Delete a channel by its ID.")
 args = parser.parse_args()
 
 config = configparser.ConfigParser()
@@ -249,6 +269,10 @@ print(f"Using root folder: {root['title']} ({root['id']})")
 
 if args.list:
     list_podcasts(root)
+    sys.exit(0)
+
+if args.delete:
+    delete_podcast(root, args.delete)
     sys.exit(0)
 
 if not args.video_id:
