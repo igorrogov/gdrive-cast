@@ -235,16 +235,65 @@ def list_podcasts(root: GoogleDriveFile):
             for episode in episodes:
                 print(f" - {episode.find('title').text}")
 
+
 def delete_podcast(root: GoogleDriveFile, channel_id: str):
+    ch = find_channel_folder(root, channel_id)
+    if ch:
+        ch.Delete()
+        print(f"Deleted podcast / channel folder: {channel_id}")
+
+
+def purge_podcast(root: GoogleDriveFile, channel_id: str):
+    ch = find_channel_folder(root, channel_id)
+    if not ch:
+        print(f"Channel folder not found: {channel_id}")
+        return
+
+    file_list = drive.ListFile({
+        'q': f"'{ch['id']}' in parents and trashed=false"
+    }).GetList()
+
+    if not file_list:
+        print(f"Channel folder not found: {channel_id}")
+        return
+
+    for f in file_list:
+        if f['title'] == "feed.xml":
+            remote_feed_file = f
+            local_feed_file = f"{FEED_CACHE_FOLDER}/{f['id']}.xml"
+            remote_feed_file.GetContentFile(local_feed_file)
+            tree = ET.parse(local_feed_file)
+            channel = tree.getroot().find('channel')
+
+            print(f"Updating channel: {f['title']} - {channel.find('title').text}")
+
+            episodes = channel.findall('item')
+            for episode in episodes:
+                print(f"Deleted episode: {episode.find('title').text}")
+                channel.remove(episode)
+
+            ET.indent(tree, space="\t", level=0)
+            tree.write(local_feed_file, encoding="utf-8", xml_declaration=True)
+
+            size = os.path.getsize(local_feed_file)
+            print(f"Uploading feed file: {f['title']}, size={humanize.naturalsize(size, binary=True)}")
+            remote_feed_file.SetContentFile(local_feed_file)
+            remote_feed_file.Upload()
+
+            print(f"Updated feed file: {f['title']}")
+        else:
+            f.Delete()
+            print(f"Deleted file: {f['title']}")
+
+
+def find_channel_folder(root: GoogleDriveFile, channel_id: str) -> GoogleDriveFile | None:
     ch_list = drive.ListFile({
         'q': f"title='{channel_id}' and '{root['id']}' in parents and trashed=false and mimeType='{FOLDER_TYPE}'"
     }).GetList()
 
     if ch_list:
-        ch = ch_list[0]
-        ch.Delete()
-        print(f"Deleted podcast / channel folder: {channel_id}")
-
+        return ch_list[0]
+    return None
 
 ## Program start
 
@@ -254,6 +303,7 @@ parser = argparse.ArgumentParser(prog='GDrive Cast', description='Host a podcast
 parser.add_argument('video_id', nargs='?', default="")
 parser.add_argument("-l", "--list", help="List existing podcast channels and exit.", action="store_true")
 parser.add_argument("-d", "--delete", help="Delete a channel by its ID.")
+parser.add_argument("-p", "--purge", help="Purge a channel by its ID (delete all episodes but keep the channel).")
 args = parser.parse_args()
 
 config = configparser.ConfigParser()
@@ -273,6 +323,10 @@ if args.list:
 
 if args.delete:
     delete_podcast(root, args.delete)
+    sys.exit(0)
+
+if args.purge:
+    purge_podcast(root, args.purge)
     sys.exit(0)
 
 if not args.video_id:
