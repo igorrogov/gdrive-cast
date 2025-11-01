@@ -206,14 +206,10 @@ def create_or_append_feed_file(feed_file, parent_folder_id, youtube_channel: You
     tree.write(feed_file, encoding="utf-8", xml_declaration=True)
 
 def list_podcasts(root: GoogleDriveFile):
-    podcast_folders = drive.ListFile({
-        'q': f"'{root['id']}' in parents and trashed=false and mimeType='{FOLDER_TYPE}'"
-    }).GetList()
+    podcast_folders = list_podcast_folders_sorted(root)
 
     if not os.path.exists(FEED_CACHE_FOLDER):
         os.makedirs(FEED_CACHE_FOLDER)
-
-    podcast_folders.sort(key=lambda x: x['id'])
 
     index = 1
     for f in podcast_folders:
@@ -236,17 +232,17 @@ def list_podcasts(root: GoogleDriveFile):
                 print(f" - {episode.find('title').text}")
 
 
-def delete_podcast(root: GoogleDriveFile, channel_id: str):
-    ch = find_channel_folder(root, channel_id)
+def delete_podcast(root: GoogleDriveFile, channel_index: int):
+    ch = find_channel_folder(root, channel_index)
     if ch:
         ch.Delete()
-        print(f"Deleted podcast / channel folder: {channel_id}")
+        print(f"Deleted podcast / channel folder: {channel_index}")
 
 
-def purge_podcast(root: GoogleDriveFile, channel_id: str):
-    ch = find_channel_folder(root, channel_id)
+def purge_podcast(root: GoogleDriveFile, channel_index: int):
+    ch = find_channel_folder(root, channel_index)
     if not ch:
-        print(f"Channel folder not found: {channel_id}")
+        print(f"Channel folder not found: {channel_index}")
         return
 
     file_list = drive.ListFile({
@@ -254,7 +250,7 @@ def purge_podcast(root: GoogleDriveFile, channel_id: str):
     }).GetList()
 
     if not file_list:
-        print(f"Channel folder not found: {channel_id}")
+        print(f"Channel folder not found: {channel_index}")
         return
 
     for f in file_list:
@@ -286,14 +282,20 @@ def purge_podcast(root: GoogleDriveFile, channel_id: str):
             print(f"Deleted file: {f['title']}")
 
 
-def find_channel_folder(root: GoogleDriveFile, channel_id: str) -> GoogleDriveFile | None:
-    ch_list = drive.ListFile({
-        'q': f"title='{channel_id}' and '{root['id']}' in parents and trashed=false and mimeType='{FOLDER_TYPE}'"
+def list_podcast_folders_sorted(root: GoogleDriveFile):
+    return drive.ListFile({
+        'q': f"'{root['id']}' in parents and trashed=false and mimeType='{FOLDER_TYPE}'",
+        'orderBy': 'folder'
     }).GetList()
 
-    if ch_list:
-        return ch_list[0]
+def find_channel_folder(root: GoogleDriveFile, channel_index: int) -> GoogleDriveFile | None:
+    podcast_folders = list_podcast_folders_sorted(root)
+
+    if 1 <= channel_index <= len(podcast_folders):
+        return podcast_folders[channel_index - 1]
+
     return None
+
 
 ## Program start
 
@@ -302,8 +304,8 @@ ET.register_namespace('itunes', 'http://www.itunes.com/dtds/podcast-1.0.dtd')
 parser = argparse.ArgumentParser(prog='GDrive Cast', description='Host a podcast on Google Drive')
 parser.add_argument('video_id', nargs='?', default="")
 parser.add_argument("-l", "--list", help="List existing podcast channels and exit.", action="store_true")
-parser.add_argument("-d", "--delete", help="Delete a channel by its ID.")
-parser.add_argument("-p", "--purge", help="Purge a channel by its ID (delete all episodes but keep the channel).")
+parser.add_argument("-d", "--delete", help="Delete a channel by its index (starts with 1).")
+parser.add_argument("-p", "--purge", help="Purge a channel by index (starts with 1) (delete all episodes but keep the channel).")
 args = parser.parse_args()
 
 config = configparser.ConfigParser()
@@ -322,11 +324,11 @@ if args.list:
     sys.exit(0)
 
 if args.delete:
-    delete_podcast(root, args.delete)
+    delete_podcast(root, int(args.delete))
     sys.exit(0)
 
 if args.purge:
-    purge_podcast(root, args.purge)
+    purge_podcast(root, int(args.purge))
     sys.exit(0)
 
 if not args.video_id:
