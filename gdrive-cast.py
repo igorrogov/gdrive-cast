@@ -7,6 +7,7 @@ import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from email.utils import format_datetime
+from urllib.parse import urlparse, parse_qs
 
 import humanize
 from googleapiclient import discovery
@@ -302,7 +303,7 @@ def find_channel_folder(root: GoogleDriveFile, channel_index: int) -> GoogleDriv
 ET.register_namespace('itunes', 'http://www.itunes.com/dtds/podcast-1.0.dtd')
 
 parser = argparse.ArgumentParser(prog='GDrive Cast', description='Host a podcast on Google Drive')
-parser.add_argument('video_id', nargs='?', default="")
+parser.add_argument('video_url', nargs='?', default="")
 parser.add_argument("-l", "--list", help="List existing podcast channels and exit.", action="store_true")
 parser.add_argument("-d", "--delete", help="Delete a channel by its index (starts with 1).")
 parser.add_argument("-p", "--purge", help="Purge a channel by index (starts with 1) (delete all episodes but keep the channel).")
@@ -331,11 +332,27 @@ if args.purge:
     purge_podcast(root, int(args.purge))
     sys.exit(0)
 
-if not args.video_id:
-    print("Video ID is required")
+if not args.video_url:
+    print("Video URL is required")
     sys.exit(-1)
 
-video_id = args.video_id
+# parse YouTube URL and extract video ID
+# https://www.youtube.com/watch?v=XYZ -> XYZ
+
+parsed_url = urlparse(args.video_url)
+if "youtube" not in parsed_url.netloc:
+    print("YouTube URL is required")
+    sys.exit(-1)
+
+query_params = parse_qs(parsed_url.query)
+
+if "v" not in query_params:
+    print(f"Param not found: 'v'. Found: {query_params}")
+    sys.exit(-1)
+
+video_id = query_params['v'][0]
+print(f"Video ID: {video_id}")
+
 video = YouTubeVideo(youtube=youtube, video_id=video_id)
 
 print("--- Video Details ---")
