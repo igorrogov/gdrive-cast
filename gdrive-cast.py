@@ -7,6 +7,7 @@ import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from email.utils import format_datetime
+from typing import Iterable
 from urllib.parse import urlparse, parse_qs
 
 import humanize
@@ -14,6 +15,8 @@ from googleapiclient import discovery
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 from pydrive2.files import GoogleDriveFile
+from youtube_transcript_api import YouTubeTranscriptApi, FetchedTranscriptSnippet
+from youtube_transcript_api.formatters import _TextBasedFormatter
 
 ROOT_FOLDER = "gdrive-cast"
 FOLDER_TYPE = "application/vnd.google-apps.folder"
@@ -297,6 +300,44 @@ def find_channel_folder(root: GoogleDriveFile, channel_index: int) -> GoogleDriv
 
     return None
 
+def get_timestamps(video_url):
+    video_id = extract_video_id(video_url)
+
+    ytt_api = YouTubeTranscriptApi()
+    formatter = MyFormatter()
+    transcript  = ytt_api.fetch(video_id)
+    text_output = formatter.format_transcript(transcript)
+    print(text_output)
+
+def extract_video_id(video_url):
+    # parse YouTube URL and extract video ID
+    # https://www.youtube.com/watch?v=XYZ -> XYZ
+
+    parsed_url = urlparse(video_url)
+    if "youtube" not in parsed_url.netloc:
+        print("YouTube URL is required")
+        sys.exit(-1)
+
+    query_params = parse_qs(parsed_url.query)
+
+    if "v" not in query_params:
+        print(f"Param not found: 'v'. Found: {query_params}")
+        sys.exit(-1)
+
+    video_id = query_params['v'][0]
+    return video_id
+
+class MyFormatter(_TextBasedFormatter):
+    def _format_timestamp(self, hours: int, mins: int, secs: int, ms: int) -> str:
+        return "{:02d}:{:02d}:{:02d}".format(hours, mins, secs)
+
+    def _format_transcript_header(self, lines: Iterable[str]) -> str:
+        return "\n\n".join(lines) + "\n"
+
+    def _format_transcript_helper(
+        self, i: int, time_text: str, snippet: FetchedTranscriptSnippet
+    ) -> str:
+        return "{}\n{}".format(time_text, snippet.text)
 
 ## Program start
 
@@ -307,10 +348,15 @@ parser.add_argument('video_url', nargs='?', default="")
 parser.add_argument("-l", "--list", help="List existing podcast channels and exit.", action="store_true")
 parser.add_argument("-d", "--delete", help="Delete a channel by its index (starts with 1).")
 parser.add_argument("-p", "--purge", help="Purge a channel by index (starts with 1) (delete all episodes but keep the channel).")
+parser.add_argument("-t", "--timestamps", help="Generate timestamps for a video URL.")
 args = parser.parse_args()
 
 config = configparser.ConfigParser()
 config.read('config.ini')
+
+if args.timestamps:
+    get_timestamps(args.timestamps)
+    sys.exit(0)
 
 # authenticate and init services
 gauth = auth()
@@ -336,21 +382,7 @@ if not args.video_url:
     print("Video URL is required")
     sys.exit(-1)
 
-# parse YouTube URL and extract video ID
-# https://www.youtube.com/watch?v=XYZ -> XYZ
-
-parsed_url = urlparse(args.video_url)
-if "youtube" not in parsed_url.netloc:
-    print("YouTube URL is required")
-    sys.exit(-1)
-
-query_params = parse_qs(parsed_url.query)
-
-if "v" not in query_params:
-    print(f"Param not found: 'v'. Found: {query_params}")
-    sys.exit(-1)
-
-video_id = query_params['v'][0]
+video_id = extract_video_id(args.video_url)
 print(f"Video ID: {video_id}")
 
 video = YouTubeVideo(youtube=youtube, video_id=video_id)
