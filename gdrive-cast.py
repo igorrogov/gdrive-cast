@@ -17,6 +17,7 @@ from pydrive2.drive import GoogleDrive
 from pydrive2.files import GoogleDriveFile
 from youtube_transcript_api import YouTubeTranscriptApi, FetchedTranscriptSnippet
 from youtube_transcript_api.formatters import _TextBasedFormatter
+from litellm import completion
 
 ROOT_FOLDER = "gdrive-cast"
 FOLDER_TYPE = "application/vnd.google-apps.folder"
@@ -303,11 +304,29 @@ def find_channel_folder(root: GoogleDriveFile, channel_index: int) -> GoogleDriv
 def get_timestamps(video_url):
     video_id = extract_video_id(video_url)
 
+    # first, extract the transcript for the video
+    print(f"Getting transcript for: {video_id}")
     ytt_api = YouTubeTranscriptApi()
     formatter = MyFormatter()
     transcript  = ytt_api.fetch(video_id)
     text_output = formatter.format_transcript(transcript)
-    print(text_output)
+    # print(text_output)
+    print(f"Successfully loaded transcript: {humanize.naturalsize(len(text_output), binary=True)}")
+
+    # then, use LLM to create chapters
+    model = config['app']['llm_model']
+    print(f"Creating chapters using: {model}")
+    os.environ[config['app']['llm_api_key_type']] = config['app']['llm_api_key']
+    with open("chapters_prompt.txt", "r") as f:
+        prompt = f.read()
+    content = prompt + text_output
+    response = completion(
+        model=model,
+        messages=[{"role": "user", "content": content}]
+    )
+    print("\nChapters:\n")
+    print(response.choices[0].message.content)
+
 
 def extract_video_id(video_url):
     # parse YouTube URL and extract video ID

@@ -1,0 +1,34 @@
+You are given a full podcast transcript.
+
+Your task is to create chapter markers that divide the episode into clearly separated main topics, each with a start timestamp.
+
+Guidelines:
+ * Focus only on high-level topics (no fine-grained details or subpoints).
+ * Each chapter should represent a clear shift in discussion.
+ * Every chapter must include a start timestamp.
+ * Do not summarize arguments or include quotes.
+ * Avoid too many chapters; prefer fewer, well-separated sections.
+ * Use concise, descriptive titles (5–10 words).
+ * Format timestamps as HH:MM:SS.
+ * Do not ask any follow-up questions.
+
+Ad Break Detection:
+ * Detect any advertisements, sponsorships, promotions, or host-read ads.
+ * Mark these explicitly as: [AD BREAK – Brand / Product]
+ * If multiple ads appear together, group them into a single ad chapter.
+
+Output format:
+ * Numbered list
+ * One line per chapter
+ * No extra commentary
+
+Example output:
+1. 00:00:00 – Introduction and episode overview
+2. 00:04:32 – Background on the main topic
+3. 00:18:10 – Key challenges and trade-offs
+4. 00:32:45 – [AD BREAK – Squarespace]
+5. 00:35:20 – Future implications and trends
+6. 00:49:05 – Closing thoughts and wrap-up
+
+Here is the transcript:
+
