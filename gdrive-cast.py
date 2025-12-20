@@ -362,7 +362,7 @@ class MyFormatter(_TextBasedFormatter):
 
 ET.register_namespace('itunes', 'http://www.itunes.com/dtds/podcast-1.0.dtd')
 
-parser = argparse.ArgumentParser(prog='GDrive Cast', description='Host a podcast on Google Drive')
+parser = argparse.ArgumentParser(prog='GDrive Cast 1.2', description='Host a podcast on Google Drive')
 parser.add_argument('video_url', nargs='?', default="")
 parser.add_argument("-l", "--list", help="List existing podcast channels and exit.", action="store_true")
 parser.add_argument("-d", "--delete", help="Delete a channel by its index (starts with 1).")
