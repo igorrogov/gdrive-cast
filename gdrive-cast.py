@@ -117,6 +117,7 @@ class YouTubeVideo:
         response = youtube.videos().list(part='snippet,contentDetails', id=video_id).execute()
         snippet = response['items'][0]['snippet']
 
+        self.id = video_id
         self.title = snippet['title']
         self.description = snippet['description']
         self.published = snippet['publishedAt']
@@ -198,9 +199,18 @@ def create_or_append_feed_file(feed_file, parent_folder_id, youtube_channel: You
 
     audio_file_size = os.path.getsize(audio_file_path)
 
+    podcast_description = video.description
+    # optionally add generated chapters / timestamps
+    if args.add_generated_timestamps:
+        timestamps = get_timestamps_by_video_id(video.id)
+        podcast_description += "\n" + timestamps
+        print(f" ----- ")
+        print(f" Added generated chapters:\n\n{timestamps}")
+        print(f" ----- ")
+
     item = ET.SubElement(channel, "item")
     ET.SubElement(item, "title").text = video.title
-    ET.SubElement(item, "description").text = video.description
+    ET.SubElement(item, "description").text = podcast_description
     ET.SubElement(item, "itunes:explicit").text = 'no'
     ET.SubElement(item, "enclosure", url=audio_link, length=f'{audio_file_size}', type="audio/mpeg")
     ET.SubElement(item, "guid").text = audio_link
@@ -301,9 +311,10 @@ def find_channel_folder(root: GoogleDriveFile, channel_index: int) -> GoogleDriv
 
     return None
 
-def get_timestamps(video_url):
-    video_id = extract_video_id(video_url)
+def get_timestamps(video_url) -> str:
+    return get_timestamps_by_video_id(extract_video_id(video_url))
 
+def get_timestamps_by_video_id(video_id) -> str:
     # first, extract the transcript for the video
     print(f"Getting transcript for: {video_id}")
     ytt_api = YouTubeTranscriptApi()
@@ -324,8 +335,7 @@ def get_timestamps(video_url):
         model=model,
         messages=[{"role": "user", "content": content}]
     )
-    print("\nChapters:\n")
-    print(response.choices[0].message.content)
+    return "\nTimestamps:\n" + response.choices[0].message.content
 
 
 def extract_video_id(video_url):
@@ -367,14 +377,15 @@ parser.add_argument('video_url', nargs='?', default="")
 parser.add_argument("-l", "--list", help="List existing podcast channels and exit.", action="store_true")
 parser.add_argument("-d", "--delete", help="Delete a channel by its index (starts with 1).")
 parser.add_argument("-p", "--purge", help="Purge a channel by index (starts with 1) (delete all episodes but keep the channel).")
-parser.add_argument("-t", "--timestamps", help="Generate timestamps for a video URL.")
+parser.add_argument("-st", "--show-timestamps", help="Generate and print timestamps for a video URL. Can be used for testing before embedding them into a podcast.")
+parser.add_argument("-adt", "--add-generated-timestamps", help="When downloading a new video, generate and insert chapters with timestamps into podcast description. Reqiures an LLM API key.", action="store_true")
 args = parser.parse_args()
 
 config = configparser.ConfigParser()
 config.read('config.ini')
 
-if args.timestamps:
-    get_timestamps(args.timestamps)
+if args.show_timestamps:
+    print(get_timestamps(args.show_timestamps))
     sys.exit(0)
 
 # authenticate and init services
