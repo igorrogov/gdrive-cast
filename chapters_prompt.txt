@@ -2,6 +2,13 @@ You are given a full podcast transcript.
 
 Your task is to create chapter markers that divide the episode into clearly separated main topics, each with a start timestamp.
 
+Mandatory language rule (highest priority):
+* Detect the original language of the transcript.
+* DO NOT translate the transcript.
+* DO NOT change the language.
+* All chapter titles MUST be written in the same language as the transcript.
+* If the transcript is multilingual, use the primary language of the episode.
+
 Guidelines:
  * Focus only on high-level topics (no fine-grained details or subpoints).
  * Each chapter should represent a clear shift in discussion.

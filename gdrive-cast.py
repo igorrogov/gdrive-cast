@@ -308,7 +308,7 @@ def get_timestamps(video_url):
     print(f"Getting transcript for: {video_id}")
     ytt_api = YouTubeTranscriptApi()
     formatter = MyFormatter()
-    transcript  = ytt_api.fetch(video_id)
+    transcript  = ytt_api.fetch(video_id, languages = [ "ru", "en" ])
     text_output = formatter.format_transcript(transcript)
     # print(text_output)
     print(f"Successfully loaded transcript: {humanize.naturalsize(len(text_output), binary=True)}")
